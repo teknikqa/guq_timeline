@@ -1,0 +1,11 @@
+name = GU-Q Timeline
+description = Customizations to display timeline.
+package = GU-Q
+core = 7.x
+
+dependencies[] = libraries
+dependencies[] = views
+
+;scripts[] = js/guq_timeline.js
+
+stylesheets[all][] = css/guq_timeline.css

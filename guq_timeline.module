@@ -1,0 +1,367 @@
+<?php
+
+/**
+ * @file
+ * Generate anad process timeline.
+ */
+
+/**
+ * Implements hook_libraries_info().
+ *
+ * For defining external libraries.
+ */
+function guq_timeline_libraries_info() {
+  $libraries['timelinr'] = array(
+    'name' => 'jQuery Timelinr ',
+    'vendor url' => 'http://www.csslab.cl/2011/08/18/jquery-timelinr/',
+    'download url' => 'http://www.csslab.cl/2011/08/18/jquery-timelinr/',
+    'version arguments' => array(
+      'file' => 'js/jquery.timelinr-0.9.52.min.js',
+      'pattern' => '/jQuery\s+Timelinr\s+?([0-9\.]+)/',
+      'lines' => 2,
+    ),
+    'files' => array(
+      'js' => array(
+        'js/jquery.timelinr-0.9.52.min.js',
+      ),
+      'css' => array(
+        'css/style_v.css',
+      ),
+      'css' => array(
+        'css/style_h.css',
+      ),
+    ),
+  );
+
+  return $libraries;
+}
+
+/**
+ * Check if the jQuery Timelinr library is installed.
+ *
+ * @return bool
+ *   A boolean indicating the installed status.
+ */
+function guq_timeline_installed() {
+  $timelinr = libraries_detect('timelinr');
+  if (!empty($timelinr['installed'])) {
+    return TRUE;
+  }
+  else {
+    return FALSE;
+  }
+}
+
+/**
+ * Check if the jQuery Timelinr library has been loaded.
+ *
+ * @return bool
+ *   A boolean indicating the loaded status.
+ */
+function guq_timeline_loaded() {
+  $timelinr = libraries_detect('timelinr');
+  if (!empty($timelinr['loaded'])) {
+    return TRUE;
+  }
+  else {
+    return FALSE;
+  }
+}
+
+/**
+ * Implements hook_block_info().
+ */
+function guq_timeline_block_info() {
+  $blocks['guq_timeline'] = array(
+    'info' => t('GUQ Firij Timeline'),
+    'cache' => DRUPAL_NO_CACHE,
+  );
+  $blocks['guq_repository_listing'] = array(
+    'info' => t('GUQ Firij Repository Listing'),
+    'cache' => DRUPAL_NO_CACHE,
+  );
+  return $blocks;
+}
+
+/**
+ * Implements hook_block_view().
+ */
+function guq_timeline_block_view($delta = '') {
+  $nid = 0;
+  $block = array();
+  if ($node = menu_get_object()) {
+    // Get the nid.
+    $nid = $node->nid;
+    switch ($delta) {
+      case 'guq_timeline':
+        $block['subject'] = '<none>';
+        $block['content'] = guq_timeline_render($nid);
+        break;
+
+      case 'guq_repository_listing':
+        $block['subject'] = '<none>';
+        $block['content'] = guq_timeline_repo_listing_render($nid);
+        break;
+    }
+  }
+  return $block;
+}
+
+/*
+function guq_timeline_fetch_bc_items($nid) {
+$query = db_select('node', 'n');
+$query->condition('n.type', 'timeline_date', '=')
+->fields('n', array('nid', 'title'));
+$result = $query->execute()->fetchAll(PDO::FETCH_ASSOC);
+
+$era = new EntityFieldQuery();
+$era_values = $era
+->entityCondition('entity_type', 'field_collection_item')
+->fieldCondition('field_calendar_era', 'value', 1, '=')
+->execute();
+
+$keys = array_keys($era_values['field_collection_item']);
+
+
+$bc = new EntityFieldQuery();
+$bc_values = $bc
+->entityCondition('entity_type', 'node')
+->entityCondition('bundle', 'timeline_date')
+->propertyCondition('status', NODE_PUBLISHED)
+->fieldCondition('field_calendar_era', 'value', 1, '=')
+->fieldCondition('field_project', 'target_id', $nid, '=')
+->fieldOrderBy('field_calendar_era', 'value', 'DESC')
+->fieldOrderBy('field_year', 'value', 'DESC')
+->fieldOrderBy('field_month', 'value', 'ASC')
+->fieldOrderBy('field_day', 'value', 'ASC')
+->execute();
+
+$nodes = node_view_multiple(node_load_multiple(array_keys($bc_values['node'])), 'teaser');
+$result = $bc_values;
+dpm($bc_values);
+dpm($result);
+dpm($nodes);
+return $bc_values['node'];
+} */
+
+/**
+ * Fetch the BC items for the timeline.
+ */
+function guq_timeline_fetch_bc_items($nid) {
+  $bc = new EntityFieldQuery();
+  $bc_values = $bc
+    ->entityCondition('entity_type', 'node')
+    ->entityCondition('bundle', 'timeline_date')
+    ->propertyCondition('status', NODE_PUBLISHED)
+    ->fieldCondition('field_calendar_era', 'value', 1, '=')
+    ->fieldCondition('field_project', 'target_id', $nid, '=')
+    ->fieldOrderBy('field_calendar_era', 'value', 'DESC')
+    ->fieldOrderBy('field_year', 'value', 'DESC')
+    ->execute();
+
+  return $bc_values['node'];
+}
+
+/**
+ * Fetch the AD items for the timeline.
+ */
+function guq_timeline_fetch_ad_items($nid) {
+  $ad = new EntityFieldQuery();
+  $ad_values = $ad
+    ->entityCondition('entity_type', 'node')
+    ->entityCondition('bundle', 'timeline_date')
+    ->propertyCondition('status', NODE_PUBLISHED)
+    ->fieldCondition('field_calendar_era', 'value', 0, '=')
+    ->fieldCondition('field_project', 'target_id', $nid, '=')
+    ->fieldOrderBy('field_calendar_era', 'value', 'DESC')
+    ->fieldOrderBy('field_year', 'value', 'ASC')
+    ->execute();
+
+  return $ad_values['node'];
+}
+
+/**
+ * Fetch all the items for the timeline.
+ */
+function guq_timeline_fetch_nodes($nid) {
+  $bc_nodes = guq_timeline_fetch_bc_items($nid);
+  $ad_nodes = guq_timeline_fetch_ad_items($nid);
+
+  $nodes = array();
+  foreach ($bc_nodes as $key) {
+    $nodes[] = $key;
+  }
+
+  foreach ($ad_nodes as $key) {
+    $nodes[] = $key;
+  }
+  foreach ($nodes as $key) {
+    $node = node_load($key->nid);
+    $year = $node->field_year['und'][0]['value'];
+    $era = $node->field_calendar_era['und'][0]['value'];
+    $era = ($era == 1 ? 'BC' : 'AD');
+
+    $year = $year . ' ' . $era;
+    $years[] = $year;
+    $key->year = $year;
+  }
+  return $nodes;
+}
+
+/**
+ * Render the timeline.
+ */
+function guq_timeline_render($nid) {
+  $nodes = guq_timeline_fetch_nodes($nid);
+  $out = '<div id="timeline-wrapper"><div id="timeline"><ul id="dates">';
+  foreach ($nodes as $key) {
+    $out .= '<li><a href="#' . $key->year . '">' . $key->year . '</a></li>';
+  }
+  $out .= '</ul><span class="filling-line" aria-hidden="true"></span><ul id="repo-items">';
+  foreach ($nodes as $key) {
+    $node = node_load($key->nid);
+    $node->build_mode = 'guq-timeline';
+    $view = node_view($node, 'guq-timeline');
+    $rendered = drupal_render($view);
+    $out .= '<li id="' . $key->year . '">' . $rendered . '</li>';
+  }
+  $out .= '</ul></div><a href="#" id="next" class="timeline-nav">+</a><a href="#" id="prev" class="timeline-nav">-</a></div></div>';
+  drupal_add_library('guq_timeline', 'timelinr');
+  libraries_load('timelinr');
+  drupal_add_js(drupal_get_path('module', 'guq_timeline') . '/js/guq_timeline.js');
+  return $out;
+}
+
+/**
+ * Implements hook_theme().
+ */
+function guq_timeline_theme($existing, $type, $theme, $path) {
+  $theme = array();
+  $theme['node__timeline'] = array(
+    'render element' => 'content',
+    'base hook' => 'node',
+    'template' => 'node--timeline',
+    'path' => drupal_get_path('module', 'guq_timeline') . '/templates',
+  );
+  return $theme;
+}
+
+/**
+ * Implements hook_entity_info_alter().
+ */
+function guq_timeline_entity_info_alter(&$entity_info) {
+  $entity_info['node']['view modes']['guq-timeline'] = array(
+    'label' => t('GU-Q Timeline'),
+    'custom settings' => TRUE,
+  );
+}
+
+/**
+ * Custom page callback hook_menu().
+ */
+function _guq_timeline_display_content($node) {
+  $node_viewed = node_view(node_load($node->nid), 'guq-timeline');
+
+  return array(
+    'content' => array(
+      'node' => $node_viewed,
+    ),
+  );
+}
+
+/**
+ * Implements hook_preprocess_node().
+ */
+function guq_timeline_preprocess_node(&$variables) {
+  if (!empty($variables['view_mode'])) {
+    $variables['theme_hook_suggestions'][] = 'node__' . $variables['view_mode'];
+    $variables['theme_hook_suggestions'][] = 'node__' . $variables['type'] . '__' . $variables['view_mode'];
+  }
+}
+
+/**
+ * Implements hook_preprocess_page().
+ */
+function guq_timeline_preprocess_page(&$variables) {
+  if (!empty($variables['node']->type)) {
+    $variables['theme_hook_suggestions'][] = 'page__node__' . $variables['node']->type;
+  }
+}
+
+/**
+ * Implements hook_node_view().
+ */
+function hook_node_view($node, $view_mode, $langcode) {
+  if ($node->type == 'timeline-date' && $view_mode == 'block') {
+    $node->content['#attached']['css'][] = $path . '/js/guq_timeline.css';
+  }
+}
+
+/**
+ * Generate the repository listing page.
+ *
+ * @param int $nid
+ *   The id of the node to be processed.
+ */
+function guq_timeline_repo_listing_render($nid) {
+  $i = 1;
+  $nodes = guq_timeline_fetch_nodes($nid);
+  $out = '<div class="view view-repository view-id-repository view-display-id-repository_listing repository-list teaser-list">';
+  // TODO: Fix sorting and cleanup filter output.
+  $out .= '<div class="view-filters">
+      <form class="ctools-auto-submit-full-form ctools-auto-submit-processed" action="/" method="get" id="views-exposed-form-repository-repository-listing" accept-charset="UTF-8">
+        <div>
+          <div class="views-exposed-form">
+            <div class="views-exposed-widgets clearfix">
+              <div class="views-exposed-widget views-widget-sort-by">
+                <div class="form-type-select form-item-sort-by form-item form-group">
+                  <label for="edit-sort-by">Sort by </label>
+                  <div class="bef-select-as-links jquery-once-2-processed">
+                    <div class="form-item">
+                      <div id="edit-sort-by-created" class="form-type-bef-link form-item-edit-sort-by-created form-item form-group">
+                        <a href="https://firij.georgetown.edu/project/mapping-africa-and-indian-ocean/maps?sort_by=created" class="active">Sort by Latest Upload</a>
+                      </div>
+                      <div id="edit-sort-by-field-year-value" class="form-type-bef-link form-item-edit-sort-by-field-year-value form-item form-group">
+                        <a href="https://firij.georgetown.edu/project/mapping-africa-and-indian-ocean/maps?sort_by=field_year_value">Sort by Map Chronology</a>
+                      </div>
+
+                    </div>
+                    <select class="form-control form-select" style="display: none;" id="edit-sort-by" name="sort_by"><option value="created" selected="selected">Sort by Latest Upload</option><option value="field_year_value">Sort by Map Chronology</option></select><input type="hidden" class="bef-new-value" name="sort_by" value="created"></div>
+                </div>
+              </div>
+              <div class="views-exposed-widget views-widget-sort-order">
+              </div>
+              <div class="views-exposed-widget views-submit-button">
+                <button class="ctools-use-ajax ctools-auto-submit-click js-hide btn btn-info form-submit" id="edit-submit-repository" name="edit-submit-repository" value="Apply" type="submit">Apply</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </form>
+    </div>';
+  $out .= '<div class="view-content">';
+  foreach ($nodes as $key) {
+    $node = node_load($key->nid);
+    $node->build_mode = 'teaser';
+    $view = node_view($node, 'teaser');
+    $rendered = drupal_render($view);
+    $out .= '<div class="views-row views-row-' . $i . 'views-row-odd views-row-first">' . $rendered . '</div>';
+    $i++;
+  }
+  $out .= '</div>';
+  // TODO: Fix pagination output.
+  $out .= '<div class="text-center">
+    <ul class="pagination">
+      <li class="prev first">
+        <a title="Go to previous page" href="#">‹ previous</a>
+      </li>
+      <li>
+        <a title="Go to page 1" href="#">1</a>
+      </li>
+      <li class="next last">
+        <a title="Go to next page" href="#">next ›</a>
+      </li>
+    </ul></div>';
+  $out .= '</div>';
+  return $out;
+}
